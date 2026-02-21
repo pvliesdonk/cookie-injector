@@ -1,0 +1,16 @@
+sites:
+  - domain: nrc.nl
+    login_url: https://login.nrc.nl
+    auth:
+      type: credentials
+      username_env: NRC_USER
+      password_env: NRC_PASS
+    refresh_interval: 12h
+
+  - domain: fd.nl
+    login_url: https://fd.nl/login
+    auth:
+      type: credentials
+      username_env: FD_USER
+      password_env: FD_PASS
+    refresh_interval: 24h

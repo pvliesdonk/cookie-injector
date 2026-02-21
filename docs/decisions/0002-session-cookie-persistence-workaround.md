@@ -42,21 +42,21 @@ import time
 def save_cookies_with_expiry_workaround(cookies: list[dict], output_path: Path) -> None:
     """
     Save cookies to JSON file with explicit expiry timestamps.
-    
+
     Workaround for Playwright issue #36139: session cookies (expires=-1)
     are not persisted across browser restarts. We explicitly set expiry
     to ensure all cookies are persistent.
     """
     processed_cookies = []
-    
+
     for cookie in cookies:
         cookie_copy = cookie.copy()
-        
+
         # Check if this is a session cookie
         if cookie_copy.get('expires', -1) == -1:
             # Set explicit expiry: 30 days from now
             cookie_copy['expires'] = int(time.time()) + (30 * 24 * 3600)
-            
+
             # Log for observability
             logger.info(
                 f"Set explicit expiry for session cookie",
@@ -64,12 +64,12 @@ def save_cookies_with_expiry_workaround(cookies: list[dict], output_path: Path) 
                 domain=cookie_copy['domain'],
                 expires_timestamp=cookie_copy['expires']
             )
-        
+
         processed_cookies.append(cookie_copy)
-    
+
     # Write to temporary file, then atomic rename
     tmp_path = output_path.with_suffix('.json.tmp')
-    
+
     cookie_data = {
         "cookies": processed_cookies,
         "metadata": {
@@ -78,12 +78,12 @@ def save_cookies_with_expiry_workaround(cookies: list[dict], output_path: Path) 
             "playwright_version": playwright.__version__
         }
     }
-    
+
     with open(tmp_path, 'w') as f:
         json.dump(cookie_data, f, indent=2)
         f.flush()
         os.fsync(f.fileno())
-    
+
     tmp_path.rename(output_path)
 ```
 
@@ -103,7 +103,7 @@ sites:
   - domain: nrc.nl
     refresh_interval: 12h
     session_cookie_ttl: 30d  # Default
-  
+
   - domain: shortlived.com
     refresh_interval: 6h
     session_cookie_ttl: 7d  # Shorter for high-security site
@@ -226,25 +226,25 @@ def test_session_cookies_get_explicit_expiry():
             "secure": True
         }
     ]
-    
+
     output_path = Path("/tmp/test_cookies.json")
     save_cookies_with_expiry_workaround(playwright_cookies, output_path)
-    
+
     # Read back and verify
     with open(output_path) as f:
         saved_data = json.load(f)
-    
+
     cookies = saved_data['cookies']
-    
+
     # Session cookie should now have explicit expiry
     session_cookie = next(c for c in cookies if c['name'] == 'session_id')
     assert session_cookie['expires'] > time.time()
     assert session_cookie['expires'] < time.time() + 31 * 24 * 3600  # ~30 days
-    
+
     # Persistent cookie should be unchanged
     persistent_cookie = next(c for c in cookies if c['name'] == 'persistent_cookie')
     assert persistent_cookie['expires'] == playwright_cookies[1]['expires']
-    
+
     # Metadata should flag workaround
     assert saved_data['metadata']['session_cookie_workaround'] is True
 

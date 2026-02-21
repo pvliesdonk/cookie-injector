@@ -158,28 +158,28 @@ The 24-hour threshold balances:
 def request(self, flow: http.HTTPFlow) -> None:
     domain = get_canonical_domain(flow.request.pretty_host)
     cookie_file = Path(COOKIE_DIR) / f"{domain}.json"
-    
+
     if not cookie_file.exists():
         # Fail-closed: missing
         return_502(flow, "missing", domain)
         return
-    
+
     cookies, metadata = load_cookies(cookie_file)
-    
+
     if all_cookies_expired(cookies):
         # Fail-closed: expired
         return_502(flow, "expired", domain)
         return
-    
+
     # Inject cookies (fail-open)
     min_expiry = min(c['expires'] for c in cookies if c['expires'] > time.time())
     time_remaining = min_expiry - time.time()
-    
+
     if time_remaining < 24 * 3600:
         flow.request.headers["X-Cookie-Injector-Status"] = "expiring"
     else:
         flow.request.headers["X-Cookie-Injector-Status"] = "ok"
-    
+
     flow.request.headers["Cookie"] = format_cookies(cookies)
 ```
 
@@ -193,7 +193,7 @@ sites:
   - domain: nrc.nl
     refresh_interval: 12h
     fail_open_threshold: 24h  # Default
-  
+
   - domain: shortlived.com
     refresh_interval: 2h
     fail_open_threshold: 6h  # Shorter threshold for short-lived cookies
