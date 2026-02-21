@@ -49,14 +49,21 @@
       tbody.innerHTML = '';
       for (const [domain, site] of Object.entries(data.sites || {})) {
         const tr = document.createElement('tr');
-        tr.innerHTML =
-          '<td>' + domain + '</td>' +
-          '<td class="status-' + site.status + '">' + site.status + '</td>' +
-          '<td>' + (site.cookies_count != null ? site.cookies_count : '—') + '</td>' +
-          '<td>' + (site.cookies_valid_until ? new Date(site.cookies_valid_until).toLocaleString() : '—') + '</td>' +
-          '<td>' + (site.time_remaining_hours != null ? site.time_remaining_hours + 'h' : '—') + '</td>' +
-          '<td>' + (site.last_refresh ? new Date(site.last_refresh).toLocaleString() : '—') + '</td>' +
-          '<td>' + (site.next_refresh ? new Date(site.next_refresh).toLocaleString() : '—') + '</td>';
+        const cells = [
+          domain,
+          site.status,
+          site.cookies_count != null ? site.cookies_count : '—',
+          site.cookies_valid_until ? new Date(site.cookies_valid_until).toLocaleString() : '—',
+          site.time_remaining_hours != null ? site.time_remaining_hours + 'h' : '—',
+          site.last_refresh ? new Date(site.last_refresh).toLocaleString() : '—',
+          site.next_refresh ? new Date(site.next_refresh).toLocaleString() : '—',
+        ];
+        cells.forEach((text, i) => {
+          const td = document.createElement('td');
+          td.textContent = text;
+          if (i === 1) td.className = 'status-' + site.status;
+          tr.appendChild(td);
+        });
         tbody.appendChild(tr);
       }
     }

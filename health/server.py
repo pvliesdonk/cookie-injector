@@ -17,7 +17,7 @@ import logging
 import os
 import time
 from datetime import UTC, datetime
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import structlog
@@ -86,7 +86,7 @@ def get_site_status(cookie_file: Path) -> dict:
                 "session_cookie_workaround", False
             ),
         }
-    except Exception as exc:
+    except (json.JSONDecodeError, ValueError, KeyError) as exc:
         logger.error("site_status_error", cookie_file=str(cookie_file), error=str(exc))
         return {"status": "error", "error": str(exc)}
 
@@ -103,14 +103,13 @@ def get_health_status(cookie_dir: Path) -> dict:
     sites: dict[str, dict] = {}
 
     for cookie_file in sorted(cookie_dir.glob("*.json")):
-        if cookie_file.name.endswith(".json.tmp"):
-            continue
         domain = cookie_file.stem
         sites[domain] = get_site_status(cookie_file)
 
-    if not sites:
+    statuses = {s["status"] for s in sites.values()}
+    if not sites or all(s == "error" for s in statuses):
         overall = "error"
-    elif all(s["status"] == "ok" for s in sites.values()):
+    elif all(s == "ok" for s in statuses):
         overall = "ok"
     else:
         overall = "degraded"
@@ -170,7 +169,7 @@ def run_server(port: int | None = None) -> None:
         port: Port to listen on. Defaults to HEALTH_PORT env, then 8081.
     """
     effective_port = port or int(os.getenv("HEALTH_PORT", "8081"))
-    server = HTTPServer(("0.0.0.0", effective_port), HealthHandler)
+    server = ThreadingHTTPServer(("0.0.0.0", effective_port), HealthHandler)
     logger.info("health_server_starting", port=effective_port)
     server.serve_forever()
 

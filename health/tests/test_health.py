@@ -99,10 +99,19 @@ def test_overall_status_error_empty(cookie_dir):
     assert result["sites"] == {}
 
 
-def test_tmp_files_excluded(cookie_dir):
+def test_tmp_files_excluded_by_glob(cookie_dir):
+    """*.json glob does not match .json.tmp files — verify no false inclusion."""
     (cookie_dir / "nrc.nl.json.tmp").write_text("{}")
     result = get_health_status(cookie_dir)
-    assert "nrc.nl" not in result["sites"]
+    assert result["sites"] == {}
+
+
+def test_overall_status_all_error(cookie_dir):
+    """When all sites have error status, overall should be error, not degraded."""
+    (cookie_dir / "nrc.nl.json").write_text("NOT JSON")
+    (cookie_dir / "fd.nl.json").write_text("NOT JSON")
+    result = get_health_status(cookie_dir)
+    assert result["status"] == "error"
 
 
 def test_metadata_propagated(cookie_dir):
