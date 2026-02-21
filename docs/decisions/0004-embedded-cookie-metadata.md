@@ -346,7 +346,7 @@ def save_cookies_with_metadata(
         "site_config": domain,
         "cookies_count": len(cookies),
         "session_cookies_converted": sum(
-            1 for c in cookies if c.get("expires", -1) > time.time() + 30 * 24 * 3600
+            1 for c in cookies if c.get("expires", -1) == -1
         ),
         **extra_metadata
     }

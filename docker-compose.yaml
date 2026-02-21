@@ -19,7 +19,7 @@ services:
     volumes:
       - ./cookies:/cookies:rw
       - ./config:/config:ro
-    env_file: .env
+    env_file: ./.env
     environment:
       - COOKIE_DIR=/cookies
       - CONFIG_PATH=/config/sites.yaml
