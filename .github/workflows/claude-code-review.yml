@@ -1,0 +1,57 @@
+name: Claude Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  claude-review:
+    if: github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Run Claude Code Review
+        id: claude-review
+        uses: anthropics/claude-code-action@v1
+        continue-on-error: true
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          track_progress: true
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            Perform a DIFFERENTIAL code review. Only review the CHANGES in this PR.
+
+            Steps:
+            1. Run `gh pr diff ${{ github.event.pull_request.number }}` to see what changed
+            2. Read CLAUDE.md for project conventions
+            3. Review the changed code for:
+               - Bugs or logic errors
+               - Security issues
+               - Convention violations (from CLAUDE.md)
+               - Missing tests for new code
+               - Type safety issues
+
+            Use `mcp__github_inline_comment__create_inline_comment` for specific line feedback.
+            Use `gh pr comment` for summary feedback.
+
+            Be concise. Focus on actionable issues. Don't comment on unchanged code.
+
+            After reviewing:
+            - If there are NO blocking issues (only minor suggestions or no issues at all),
+              APPROVE the PR with: `gh pr review ${{ github.event.pull_request.number }} --approve --body "LGTM. <brief summary>"`
+            - If there ARE blocking issues (bugs, security, missing tests),
+              REQUEST CHANGES with: `gh pr review ${{ github.event.pull_request.number }} --request-changes --body "<summary of blocking issues>"`
+
+          claude_args: |
+            --allowedTools mcp__github_inline_comment__create_inline_comment,Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr comment:*),Bash(gh pr review:*),Read,Grep,Glob
