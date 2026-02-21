@@ -329,7 +329,7 @@ def save_cookies_with_metadata(
 ) -> None:
     """
     Save cookies and metadata atomically to domain.json file.
-    
+
     Args:
         domain: Canonical domain (e.g., "nrc.nl")
         cookies: List of cookie dictionaries (Playwright format)
@@ -338,7 +338,7 @@ def save_cookies_with_metadata(
     """
     cookie_file = Path(COOKIE_DIR) / f"{domain}.json"
     tmp_file = cookie_file.with_suffix(".json.tmp")
-    
+
     # Build metadata
     metadata = {
         "refreshed_at": datetime.utcnow().isoformat() + "Z",
@@ -346,26 +346,26 @@ def save_cookies_with_metadata(
         "site_config": domain,
         "cookies_count": len(cookies),
         "session_cookies_converted": sum(
-            1 for c in cookies if c.get("expires", -1) > time.time() + 30 * 24 * 3600
+            1 for c in cookies if c.get("expires", -1) == -1
         ),
         **extra_metadata
     }
-    
+
     # Combine cookies and metadata
     data = {
         "cookies": cookies,
         "metadata": metadata
     }
-    
+
     # Write to temp file
     with open(tmp_file, "w") as f:
         json.dump(data, f, indent=2)
         f.flush()
         os.fsync(f.fileno())
-    
+
     # Atomic rename
     tmp_file.rename(cookie_file)
-    
+
     logger.info(
         f"Saved cookies with metadata",
         domain=domain,
@@ -380,35 +380,35 @@ def save_cookies_with_metadata(
 def load_cookies_with_metadata(domain: str) -> tuple[list[dict], dict]:
     """
     Load cookies and metadata from domain.json file.
-    
+
     Returns:
         (cookies, metadata) tuple
-        
+
     Raises:
         FileNotFoundError: If cookie file doesn't exist
         ValueError: If file format is invalid
     """
     cookie_file = Path(COOKIE_DIR) / f"{domain}.json"
-    
+
     if not cookie_file.exists():
         raise FileNotFoundError(f"No cookies for domain: {domain}")
-    
+
     with open(cookie_file) as f:
         data = json.load(f)
-    
+
     # Validate schema
     if "cookies" not in data:
         raise ValueError(f"Invalid cookie file format (missing 'cookies' key): {domain}")
-    
+
     cookies = data["cookies"]
     metadata = data.get("metadata", {})
-    
+
     # Validate cookie structure
     for cookie in cookies:
         required_fields = ["name", "value", "domain"]
         if not all(field in cookie for field in required_fields):
             raise ValueError(f"Invalid cookie structure in {domain}")
-    
+
     return cookies, metadata
 ```
 
@@ -422,14 +422,14 @@ def migrate_legacy_format(domain: str) -> None:
     Migrate legacy pure-Playwright format to embedded metadata format.
     """
     cookie_file = Path(COOKIE_DIR) / f"{domain}.json"
-    
+
     with open(cookie_file) as f:
         data = json.load(f)
-    
+
     # Detect legacy format (array at top level)
     if isinstance(data, list):
         logger.info(f"Migrating legacy format for {domain}")
-        
+
         cookies = data
         metadata = {
             "refreshed_at": datetime.fromtimestamp(
@@ -439,7 +439,7 @@ def migrate_legacy_format(domain: str) -> None:
             "site_config": domain,
             "migrated_from_legacy": True
         }
-        
+
         # Rewrite in new format
         save_cookies_with_metadata(domain, cookies, "migrated", **metadata)
 ```
@@ -472,7 +472,7 @@ class CookieMetadata(BaseModel):
     refresh_source: Literal["scheduled", "manual", "startup", "migrated"]
     site_config: str
     cookies_count: int = Field(ge=0)
-    
+
     # Optional fields
     next_refresh: str | None = None
     playwright_version: str | None = None
@@ -491,10 +491,10 @@ class CookieStorage(BaseModel):
 def load_cookies_validated(domain: str) -> CookieStorage:
     """Load and validate cookies against schema."""
     cookie_file = Path(COOKIE_DIR) / f"{domain}.json"
-    
+
     with open(cookie_file) as f:
         data = json.load(f)
-    
+
     # Pydantic validation
     try:
         return CookieStorage(**data)

@@ -65,39 +65,39 @@ Implement **adaptive scheduled refresh** with the following algorithm:
 async def calculate_next_refresh(domain: str) -> float:
     """
     Calculate next refresh time based on cookie expiry.
-    
+
     Returns seconds until next refresh should occur.
     """
     cookie_file = Path(COOKIE_DIR) / f"{domain}.json"
-    
+
     if not cookie_file.exists():
         # No cookies yet, refresh immediately
         return 0
-    
+
     cookies, metadata = load_cookies(cookie_file)
-    
+
     # Find earliest expiry among all cookies
     valid_cookies = [c for c in cookies if c.get('expires', -1) > time.time()]
-    
+
     if not valid_cookies:
         # All cookies expired, refresh immediately
         return 0
-    
+
     min_expiry = min(c['expires'] for c in valid_cookies)
     cookie_lifetime = min_expiry - time.time()
-    
+
     # Refresh when 75% of lifetime has passed (25% remaining)
     # Example: 24h cookie → refresh at 18h (6h remaining)
     refresh_interval = cookie_lifetime * 0.75
-    
+
     # Enforce minimum interval (avoid excessive refreshes)
     MIN_INTERVAL = 6 * 3600  # 6 hours
     refresh_interval = max(refresh_interval, MIN_INTERVAL)
-    
+
     # Enforce maximum interval (don't wait too long even for long-lived cookies)
     MAX_INTERVAL = 24 * 3600  # 24 hours
     refresh_interval = min(refresh_interval, MAX_INTERVAL)
-    
+
     return refresh_interval
 ```
 
@@ -111,15 +111,15 @@ async def run_scheduled_refresh(domain: str) -> None:
     Execute scheduled refresh with TTL safety check.
     """
     cookie_file = Path(COOKIE_DIR) / f"{domain}.json"
-    
+
     if cookie_file.exists():
         cookies, metadata = load_cookies(cookie_file)
         valid_cookies = [c for c in cookies if c.get('expires', -1) > time.time()]
-        
+
         if valid_cookies:
             min_expiry = min(c['expires'] for c in valid_cookies)
             time_remaining = min_expiry - time.time()
-            
+
             # Safety check: if <24h remaining, log warning
             if time_remaining < 24 * 3600:
                 logger.warning(
@@ -127,19 +127,19 @@ async def run_scheduled_refresh(domain: str) -> None:
                     domain=domain,
                     hours_remaining=time_remaining / 3600
                 )
-    
+
     # Execute login flow
     await perform_site_login(domain)
-    
+
     # Calculate next refresh time
     next_refresh_seconds = await calculate_next_refresh(domain)
-    
+
     logger.info(
         f"Scheduled next refresh",
         domain=domain,
         next_refresh_in_hours=next_refresh_seconds / 3600
     )
-    
+
     # Schedule next run
     await asyncio.sleep(next_refresh_seconds)
     await run_scheduled_refresh(domain)  # Recursive scheduling
@@ -261,14 +261,14 @@ async def main():
     Start refresh schedulers for all configured sites.
     """
     config = load_config()
-    
+
     tasks = []
     for site in config.sites:
         task = asyncio.create_task(run_scheduled_refresh(site.domain))
         tasks.append(task)
-        
+
         logger.info(f"Started refresh scheduler for {site.domain}")
-    
+
     # Run all schedulers concurrently
     await asyncio.gather(*tasks)
 ```
@@ -285,12 +285,12 @@ async def perform_site_login(domain: str) -> None:
     """Execute login flow with concurrency limit."""
     async with browser_semaphore:
         logger.info(f"Acquiring browser for {domain}")
-        
+
         async with async_playwright() as p:
             browser = await p.chromium.launch()
             # ... login flow ...
             await browser.close()
-        
+
         logger.info(f"Released browser for {domain}")
 ```
 
@@ -309,15 +309,15 @@ async def run_scheduled_refresh(domain: str) -> None:
     Execute scheduled refresh with startup optimization.
     """
     cookie_file = Path(COOKIE_DIR) / f"{domain}.json"
-    
+
     if cookie_file.exists():
         cookies, metadata = load_cookies(cookie_file)
         valid_cookies = [c for c in cookies if c.get('expires', -1) > time.time()]
-        
+
         if valid_cookies:
             min_expiry = min(c['expires'] for c in valid_cookies)
             time_remaining = min_expiry - time.time()
-            
+
             # If cookies valid for >6h, skip immediate refresh
             if time_remaining > 6 * 3600:
                 logger.info(
@@ -325,13 +325,13 @@ async def run_scheduled_refresh(domain: str) -> None:
                     domain=domain,
                     hours_remaining=time_remaining / 3600
                 )
-                
+
                 # Schedule next refresh based on existing cookies
                 next_refresh_seconds = await calculate_next_refresh(domain)
                 await asyncio.sleep(next_refresh_seconds)
                 # Continue with normal flow...
                 return
-    
+
     # No valid cookies or expiring soon, refresh immediately
     await perform_site_login(domain)
     # ... rest of logic ...
@@ -352,12 +352,12 @@ def test_calculate_next_refresh_adapts_to_lifetime():
     cookies_24h = [{"expires": time.time() + 24 * 3600}]
     interval = calculate_next_refresh("example.com", cookies_24h)
     assert 17 * 3600 < interval < 19 * 3600  # ~18h (75% of 24h)
-    
+
     # 6h cookie
     cookies_6h = [{"expires": time.time() + 6 * 3600}]
     interval = calculate_next_refresh("example.com", cookies_6h)
     assert 6 * 3600 < interval < 7 * 3600  # 6h (minimum enforced)
-    
+
     # 30d cookie
     cookies_30d = [{"expires": time.time() + 30 * 24 * 3600}]
     interval = calculate_next_refresh("example.com", cookies_30d)
@@ -368,7 +368,7 @@ def test_safety_check_triggers_on_approaching_expiry():
     """Verify proactive refresh when <24h remaining."""
     # Cookie expiring in 12h
     cookies = [{"expires": time.time() + 12 * 3600}]
-    
+
     # Safety check should trigger immediate refresh
     should_refresh_now = check_ttl_safety(cookies)
     assert should_refresh_now is True
@@ -386,15 +386,15 @@ async def test_adaptive_schedule_progression(mock_time):
     with mock_site_returning_24h_cookies():
         # Start scheduler
         task = asyncio.create_task(run_scheduled_refresh("test.com"))
-        
+
         # Advance time and verify refresh occurs at ~18h mark
         await mock_time.advance(18 * 3600)
         await asyncio.sleep(0.1)  # Let scheduler run
-        
+
         # Verify refresh occurred
         cookie_file = Path("/cookies/test.com.json")
         assert cookie_file.stat().st_mtime > initial_mtime
-        
+
         # Verify next refresh scheduled for ~18h again
         next_refresh = get_next_scheduled_time("test.com")
         assert 17 * 3600 < next_refresh < 19 * 3600

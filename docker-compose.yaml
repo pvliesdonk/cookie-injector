@@ -1,0 +1,41 @@
+services:
+  proxy:
+    build:
+      context: ./proxy
+      dockerfile: Dockerfile
+    volumes:
+      - ./cookies:/cookies:ro
+    ports:
+      - "8080:8080"
+    environment:
+      - COOKIE_DIR=/cookies
+      - LOG_LEVEL=INFO
+    restart: unless-stopped
+
+  refresh:
+    build:
+      context: ./refresh
+      dockerfile: Dockerfile
+    volumes:
+      - ./cookies:/cookies:rw
+      - ./config:/config:ro
+    env_file: ./.env
+    environment:
+      - COOKIE_DIR=/cookies
+      - CONFIG_PATH=/config/sites.yaml
+      - LOG_LEVEL=INFO
+    restart: unless-stopped
+
+  health:
+    build:
+      context: ./health
+      dockerfile: Dockerfile
+    volumes:
+      - ./cookies:/cookies:ro
+    ports:
+      - "8081:8081"
+    environment:
+      - COOKIE_DIR=/cookies
+      - HEALTH_PORT=8081
+      - LOG_LEVEL=INFO
+    restart: unless-stopped
