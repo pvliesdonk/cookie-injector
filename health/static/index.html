@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="refresh" content="60">
+  <title>Cookie Injector Status</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
+    h1 { font-size: 1.5rem; }
+    .overall { display: inline-block; padding: 0.3rem 0.8rem; border-radius: 4px; font-weight: bold; }
+    .ok { background: #d4edda; color: #155724; }
+    .degraded { background: #fff3cd; color: #856404; }
+    .error { background: #f8d7da; color: #721c24; }
+    table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+    th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #dee2e6; }
+    th { background: #f8f9fa; }
+    .status-ok { color: #155724; font-weight: bold; }
+    .status-expiring { color: #856404; font-weight: bold; }
+    .status-expired { color: #721c24; font-weight: bold; }
+    .status-error { color: #721c24; font-weight: bold; }
+    small { color: #6c757d; }
+  </style>
+</head>
+<body>
+  <h1>Cookie Injector Status</h1>
+  <p>Overall: <span id="overall" class="overall">loading...</span></p>
+  <p><small>Last checked: <span id="timestamp">—</span> · Auto-refreshes every 60s</small></p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Domain</th><th>Status</th><th>Cookies</th>
+        <th>Valid Until</th><th>Remaining</th><th>Last Refresh</th><th>Next Refresh</th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+
+  <script>
+    async function load() {
+      const res = await fetch('/health');
+      const data = await res.json();
+      const overall = document.getElementById('overall');
+      overall.textContent = data.status;
+      overall.className = 'overall ' + data.status;
+      document.getElementById('timestamp').textContent = new Date(data.timestamp).toLocaleString();
+      const tbody = document.getElementById('tbody');
+      tbody.innerHTML = '';
+      for (const [domain, site] of Object.entries(data.sites || {})) {
+        const tr = document.createElement('tr');
+        tr.innerHTML =
+          '<td>' + domain + '</td>' +
+          '<td class="status-' + site.status + '">' + site.status + '</td>' +
+          '<td>' + (site.cookies_count != null ? site.cookies_count : '—') + '</td>' +
+          '<td>' + (site.cookies_valid_until ? new Date(site.cookies_valid_until).toLocaleString() : '—') + '</td>' +
+          '<td>' + (site.time_remaining_hours != null ? site.time_remaining_hours + 'h' : '—') + '</td>' +
+          '<td>' + (site.last_refresh ? new Date(site.last_refresh).toLocaleString() : '—') + '</td>' +
+          '<td>' + (site.next_refresh ? new Date(site.next_refresh).toLocaleString() : '—') + '</td>';
+        tbody.appendChild(tr);
+      }
+    }
+    load().catch(e => console.error(e));
+  </script>
+</body>
+</html>
