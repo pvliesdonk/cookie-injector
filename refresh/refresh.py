@@ -15,6 +15,7 @@ logger = structlog.get_logger(__name__)
 
 MAX_RETRIES = 3
 BASE_BACKOFF_SECONDS = 5
+LOGIN_FLOW_TIMEOUT = 120  # seconds
 
 
 def _script_module_name(domain: str) -> str:
@@ -39,7 +40,10 @@ async def perform_refresh(
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             log.info("refresh_attempt_starting", attempt=attempt)
-            cookies = await _run_login_flow(site, semaphore)
+            cookies = await asyncio.wait_for(
+                _run_login_flow(site, semaphore),
+                timeout=LOGIN_FLOW_TIMEOUT,
+            )
             save_cookies_with_metadata(
                 domain=site.domain,
                 cookies=cookies,

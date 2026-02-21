@@ -12,7 +12,7 @@ from refresh.scheduler import run_scheduled_refresh
 
 structlog.configure(
     wrapper_class=structlog.make_filtering_bound_logger(
-        getattr(logging, os.getenv("LOG_LEVEL", "INFO"))
+        getattr(logging, os.getenv("LOG_LEVEL", "INFO"), logging.INFO)
     )
 )
 

@@ -107,7 +107,10 @@ async def run_scheduled_refresh(
         if interval == 0:
             interval = MIN_INTERVAL
 
-        next_at = datetime.fromtimestamp(time.time() + interval, tz=UTC).isoformat()
+        next_at = (
+            datetime.fromtimestamp(time.time() + interval, tz=UTC)
+            .strftime("%Y-%m-%dT%H:%M:%SZ")
+        )
         log.info(
             "next_refresh_scheduled", next_at=next_at, hours=round(interval / 3600, 2)
         )

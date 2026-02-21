@@ -62,7 +62,7 @@ def load_config(path: str | None = None) -> Config:
     with config_path.open() as f:
         raw = yaml.safe_load(f)
 
-    config = Config(**raw)
+    config = Config(**(raw or {}))
     logger.info(
         "config_loaded",
         path=str(config_path),
