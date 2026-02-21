@@ -37,6 +37,7 @@ class CookieInjectorAddon:
 
     def __init__(self) -> None:
         self.cookie_dir = Path(os.getenv("COOKIE_DIR", "/cookies"))
+        self._flow_status: dict[str, str] = {}
         logger.info("addon_initialized", cookie_dir=str(self.cookie_dir))
 
     def request(self, flow: http.HTTPFlow) -> None:
@@ -60,7 +61,7 @@ class CookieInjectorAddon:
 
         try:
             cookies, metadata = load_cookies(cookie_file)
-        except Exception as exc:
+        except (json.JSONDecodeError, ValueError, FileNotFoundError) as exc:
             log.error("cookie_load_error", error=str(exc))
             self._return_502(flow, "error", domain)
             return
@@ -73,8 +74,14 @@ class CookieInjectorAddon:
             return
 
         flow.request.headers["Cookie"] = format_cookies(valid_cookies)
-        flow.request.headers["X-Cookie-Injector-Status"] = status
+        self._flow_status[flow.id] = status
         log.info("cookies_injected", status=status, count=len(valid_cookies))
+
+    def response(self, flow: http.HTTPFlow) -> None:
+        """Add X-Cookie-Injector-Status header to the response."""
+        status = self._flow_status.pop(flow.id, None)
+        if status and flow.response:
+            flow.response.headers["X-Cookie-Injector-Status"] = status
 
     def _return_502(
         self,
@@ -91,7 +98,7 @@ class CookieInjectorAddon:
         }
         flow.response = http.Response.make(
             502,
-            json.dumps(error_body, indent=2).encode(),
+            json.dumps(error_body).encode(),
             {
                 "Content-Type": "application/json",
                 "X-Cookie-Injector-Status": reason,

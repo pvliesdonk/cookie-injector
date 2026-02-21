@@ -1,7 +1,8 @@
-"""Tests for the proxy cookie store and hybrid failure handling logic."""
+"""Tests for the proxy cookie store and addon hybrid failure handling."""
 from __future__ import annotations
 
 import json
+import sys
 import time
 from pathlib import Path
 
@@ -120,3 +121,100 @@ def test_status_uses_earliest_expiry():
     status, valid = get_cookie_status(cookies)
     assert status == "expiring"
     assert len(valid) == 2
+
+
+# --- CookieInjectorAddon integration tests ---
+
+@pytest.fixture(autouse=True, scope="session")
+def _addon_sys_path():
+    """Add proxy/ to sys.path so addon.py's standalone imports resolve."""
+    proxy_dir = str(Path(__file__).resolve().parent.parent)
+    if proxy_dir not in sys.path:
+        sys.path.insert(0, proxy_dir)
+
+
+def _make_flow(host):
+    """Create a real mitmproxy HTTPFlow for testing."""
+    from mitmproxy.test import tflow
+
+    flow = tflow.tflow()
+    flow.request.host = host
+    return flow
+
+
+@pytest.fixture()
+def addon(tmp_path, monkeypatch):
+    """Create a CookieInjectorAddon with a temp cookie dir."""
+    monkeypatch.setenv("COOKIE_DIR", str(tmp_path))
+    from proxy.addon import CookieInjectorAddon
+
+    a = CookieInjectorAddon()
+    a.cookie_dir = tmp_path
+    return a
+
+
+class TestAddonRequest:
+    """Tests for CookieInjectorAddon.request()."""
+
+    def test_missing_cookie_file_returns_502(self, addon):
+        flow = _make_flow("www.nrc.nl")
+        addon.request(flow)
+        assert flow.response is not None
+        assert flow.response.status_code == 502
+        body = json.loads(flow.response.get_text())
+        assert body["status"] == "missing"
+        assert flow.response.headers["X-Cookie-Injector-Status"] == "missing"
+
+    def test_expired_cookies_returns_502(self, addon, tmp_path):
+        _write_cookie_file(
+            tmp_path,
+            "nrc.nl",
+            [{"name": "s", "value": "v", "expires": time.time() - 3600}],
+        )
+        flow = _make_flow("www.nrc.nl")
+        addon.request(flow)
+        assert flow.response is not None
+        assert flow.response.status_code == 502
+        body = json.loads(flow.response.get_text())
+        assert body["status"] == "expired"
+
+    def test_valid_cookies_injected(self, addon, tmp_path):
+        _write_cookie_file(
+            tmp_path,
+            "nrc.nl",
+            [{"name": "s", "value": "v", "expires": time.time() + 48 * 3600}],
+        )
+        flow = _make_flow("www.nrc.nl")
+        addon.request(flow)
+        assert flow.response is None
+        assert flow.request.headers["Cookie"] == "s=v"
+
+    def test_status_header_on_response_not_request(self, addon, tmp_path):
+        from mitmproxy import http
+
+        _write_cookie_file(
+            tmp_path,
+            "nrc.nl",
+            [{"name": "s", "value": "v", "expires": time.time() + 48 * 3600}],
+        )
+        flow = _make_flow("www.nrc.nl")
+        addon.request(flow)
+        assert "X-Cookie-Injector-Status" not in flow.request.headers
+        # Simulate upstream response arriving
+        flow.response = http.Response.make(200, b"OK")
+        addon.response(flow)
+        assert flow.response.headers["X-Cookie-Injector-Status"] == "ok"
+
+    def test_malformed_json_returns_502(self, addon, tmp_path):
+        (tmp_path / "nrc.nl.json").write_text("NOT JSON{{{")
+        flow = _make_flow("www.nrc.nl")
+        addon.request(flow)
+        assert flow.response is not None
+        assert flow.response.status_code == 502
+        body = json.loads(flow.response.get_text())
+        assert body["status"] == "error"
+
+    def test_unknown_domain_passes_through(self, addon):
+        flow = _make_flow("localhost")
+        addon.request(flow)
+        assert flow.response is None
